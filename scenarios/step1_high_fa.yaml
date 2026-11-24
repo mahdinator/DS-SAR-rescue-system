@@ -1,0 +1,43 @@
+# Stress test: step 1 with double the default false-alarm rates (about 2.2% per
+# pass on average). Shows operator overload. Everything else matches step1.yaml.
+name: step1_high_fa
+seed: 42
+duration_s: 150      # real seconds
+speedup: 25          # 150 s real = about 62 mission minutes
+base_port: 5650      # different ports, so it can run alongside step1.yaml
+
+world:
+  width_cells: 50    # 50 x 20 m = 1 km
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+
+# Only pfa is overridden; poa, pod and sigma keep their defaults.
+terrain:
+  rubble: {pfa: 0.03}
+  damaged_building: {pfa: 0.03}
+  road: {pfa: 0.01}
+  forest: {pfa: 0.04}
+  open_field: {pfa: 0.01}
+  water: {pfa: 0.02}
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 3
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: false}   # steps 1-4 were measured without the battery model
+
+ground_stations:
+  count: 1
+
+operators:
+  - {id: bot-1, kind: bot, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+
+planner:
+  kind: grid
+  sector_cells: 10
+
+# Perfect network, like step1.yaml.
+radio: {enabled: false}

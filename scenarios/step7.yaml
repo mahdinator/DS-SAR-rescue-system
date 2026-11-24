@@ -1,0 +1,61 @@
+# Step 7: chain of command. Two people can hold incident command (ic-1, ic-2), two
+# analysts review sightings. Command actions go through the replicated log and are
+# checked when applied.
+#
+# Story (mission minutes):
+#   10  ic-1 marks a priority zone (a collapsed school, say): drones search there sooner
+#    7  drone-3 is lost mid-search -> lost-aircraft alert -> the IC acknowledges it
+#   25  ic-1 hands command to ic-2; ic-2 accepts after reading the briefing
+#   27  ic-1 tries to change a zone: refused (no longer in command)
+#   40  ic-2's terminal dies -> the leader station offers command to ic-1 -> acting IC
+name: step7
+seed: 42
+duration_s: 200      # real seconds
+speedup: 25          # about 83 mission minutes
+
+world:
+  width_cells: 50
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+  decoys: 30
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 4
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: true, endurance_s: 1200, reserve_s: 120, swap_s: 120}
+  launch: staggered
+
+ground_stations:
+  count: 3
+
+operators:
+  - {id: bot-1, kind: bot, station: gs-1, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+  - {id: bot-2, kind: bot, station: gs-2, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+  - {id: ic-1, kind: commander, station: gs-1, accept_delay_s: 30, ack_delay_s: 20}
+  - {id: ic-2, kind: commander, station: gs-2, accept_delay_s: 30, ack_delay_s: 20}
+
+command:
+  roster:
+    - {id: ic-1, role: commander}
+    - {id: ic-2, role: commander}
+    - {id: bot-1, role: analyst}
+    - {id: bot-2, role: analyst}
+  initial: ic-1
+  succession: [ic-1, ic-2]
+  absence_timeout_real_s: 5
+  script:
+    - {t: 600,  by: ic-1, action: zone, args: {x: 250, y: 750, radius_m: 200, weight: 3}}
+    - {t: 1500, by: ic-1, action: transfer, args: {to: ic-2}}
+    - {t: 1620, by: ic-1, action: zone, args: {x: 800, y: 300, radius_m: 150, weight: 3}}
+
+planner:
+  kind: sortie
+  strategy: greedy
+
+faults:
+  - {t: 400, kill: drone-3}
+  - {t: 2400, kill: ic-2}

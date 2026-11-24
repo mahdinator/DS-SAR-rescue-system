@@ -1,0 +1,49 @@
+# Step 4: replicated ground stations. Three stations at the command post run Raft;
+# two analysts sit at different stations. The fault script exercises every
+# failure the replication has to survive.
+#
+# Compare with primary-backup (two stations), same faults:
+#   python -m sar.launcher.run scenarios/step4.yaml --name pb
+#       --set consensus.kind=primary_backup --set ground_stations.count=2
+name: step4
+seed: 42
+duration_s: 200      # real seconds
+speedup: 25          # about 83 mission minutes
+
+world:
+  width_cells: 50
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+  decoys: 30
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 4
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: false}   # steps 1-4 were measured without the battery model
+
+ground_stations:
+  count: 3
+
+consensus:
+  kind: raft           # raft | primary_backup
+
+operators:
+  # Each analyst works at one station's terminal; that station forwards to the leader.
+  - {id: bot-1, kind: bot, station: gs-1, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+  - {id: bot-2, kind: bot, station: gs-2, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+
+planner:
+  kind: grid
+  sector_cells: 10
+  passes: 2
+
+# Mission seconds (60 s = 1 min).
+faults:
+  - {t: 900,  duration: 360, isolate: [gs-1]}   # gs-1 cut off from everyone for 6 min
+  - {t: 1800, kill: gs-2}                        # gs-2 crashes...
+  - {t: 2100, restart: gs-2}                     # ...and comes back 5 min later (recovers from its log)
+  - {t: 2700, duration: 360, cut: [gs-1, gs-2]}  # only the gs-1 <-> gs-2 link breaks

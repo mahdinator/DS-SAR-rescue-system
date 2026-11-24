@@ -1,0 +1,37 @@
+# Step 1: the minimum loop. One ground station, three drones, one bot operator,
+# static square sectors, no faults. Values not set here come from
+# sar/common/config.py DEFAULTS.
+name: step1
+seed: 42
+duration_s: 150      # real seconds
+speedup: 25          # 150 s real = about 62 mission minutes
+
+world:
+  width_cells: 50    # 50 x 20 m = 1 km
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 3
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: false}   # steps 1-4 were measured without the battery model
+
+ground_stations:
+  count: 1
+
+operators:
+  # match_sigmas: a sighting counts as real if a true victim is within
+  # match_sigmas x the terrain's position error (sigma). Use match_radius_m
+  # instead for one fixed radius everywhere.
+  - {id: bot-1, kind: bot, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+
+planner:
+  kind: grid
+  sector_cells: 10
+
+# Step 1 is the perfect-network baseline.
+radio: {enabled: false}

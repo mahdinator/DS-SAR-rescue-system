@@ -1,0 +1,38 @@
+# Step 6: battery logistics. One swap point at base, first come first served.
+# A swap (battery change plus pre-flight check) takes 4 minutes. Drones that take
+# off together run low together and queue together: nobody searches meanwhile.
+#
+#   python -m sar.launcher.run scenarios/step6.yaml --name naive
+#   python -m sar.launcher.run scenarios/step6.yaml --name staggered --set drones.launch=staggered
+name: step6
+seed: 42
+duration_s: 200      # real seconds
+speedup: 25          # about 83 mission minutes
+
+world:
+  width_cells: 50
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+  decoys: 30
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 5
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: true, endurance_s: 1200, reserve_s: 120, swap_s: 240}
+  launch: naive        # naive | staggered
+
+ground_stations:
+  count: 3
+
+operators:
+  - {id: bot-1, kind: bot, station: gs-1, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+  - {id: bot-2, kind: bot, station: gs-2, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+
+planner:
+  kind: sortie
+  strategy: greedy
+  leftover_boost: 0.5

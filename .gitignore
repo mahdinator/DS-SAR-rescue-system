@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+runs/
+.pytest_cache/
+# Raw experiment runs (event logs, ~300 MB): regenerate with python -m sar.tools.experiments
+results/experiments/*/runs/

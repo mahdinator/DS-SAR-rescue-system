@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAR control center</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --ink: #e6e8ec; --quiet: #9aa1ad; --faint: #6b7280; --line: #2a2f3a;
+    --accent: #60a5fa; --good: #4ade80; --warn: #fbbf24; --bad: #f87171; --purple: #c084fc; --field: #0f1218;
+    color-scheme: dark;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  button, select, input { font: inherit; }
+
+  header { display: flex; align-items: center; gap: 22px; padding: 10px 20px; background: #0a0c10; color: #f4f3ef; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .01em; }
+  header .run { color: #b9b7af; }
+  .clock { font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 650; }
+  .clock small { font-size: 12px; font-weight: 400; color: #b9b7af; margin-left: 6px; }
+  .kpis { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+  .kpi { background: #1b1f27; border: 1px solid var(--line); border-radius: 8px; padding: 4px 12px; min-width: 96px; }
+  .kpi b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .kpi span { font-size: 11px; color: #b9b7af; text-transform: uppercase; letter-spacing: .05em; }
+  .kpi.alert b { color: #fca5a5; }
+  .clock.paused { color: #fbbf24; }
+  .clocktool { border-color: #3b4252; background: #12151b; }
+  #speeds .btn { margin-right: 2px; }
+  #speeds .btn.on { background: var(--accent); border-color: var(--accent); color: #0b1220; }
+
+  main { display: grid; grid-template-columns: minmax(420px, 620px) minmax(420px, 1fr); gap: 14px; padding: 14px 20px 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .card > h2, .cardhead { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line);
+    font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--quiet); font-weight: 650; }
+  .cardbody { padding: 12px 14px; }
+
+  .mapwrap { position: relative; }
+  canvas#map { width: 100%; aspect-ratio: 1; display: block; cursor: default; }
+  canvas#map.placing { cursor: crosshair; }
+  .toggles { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; text-transform: none; letter-spacing: 0; }
+  .toggle { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--quiet); cursor: pointer; }
+  .toggle.on { background: var(--accent); color: #0b1220; border-color: var(--accent); }
+  .banner { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: #b91c1c; color: #fff; padding: 6px 14px; border-radius: 999px; font-weight: 600; display: none; }
+  .tip { position: absolute; display: none; pointer-events: none; max-width: 280px; background: rgba(10,12,16,.95); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 9px; font-size: 12px; color: var(--ink); z-index: 5; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 10px 14px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 12px; }
+  .legend i { display: inline-block; width: 11px; height: 11px; margin-right: 5px; vertical-align: -1px; border-radius: 50%; }
+
+  .side { display: grid; gap: 14px; align-content: start; }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: var(--quiet); font-weight: 600; border-bottom: 2px solid transparent; }
+  .tab.on { color: var(--ink); border-bottom-color: var(--ink); }
+  .pane { display: none; padding: 12px 14px; }
+  .pane.on { display: block; }
+
+  .tool { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  .tool h3 { margin: 0 0 2px; font-size: 13px; }
+  .tool p { margin: 0 0 8px; color: var(--quiet); font-size: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, input[type=number] { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--ink); }
+  .btn { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: #222733; color: var(--ink); cursor: pointer; font-weight: 600; }
+  .btn.danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+  .btn.dark { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .btn.small { padding: 3px 9px; font-size: 12px; }
+  .btn:disabled { opacity: .4; cursor: default; }
+  input[type=range] { flex: 1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--quiet); font-weight: 500; font-size: 12px; }
+  tr.sel td { background: #1e2a44; }
+  tbody tr { cursor: pointer; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 650; }
+  .pill.ok { background: #14301f; color: var(--good); }
+  .pill.bad { background: #3a1717; color: var(--bad); }
+  .pill.warn { background: #3a2a0c; color: var(--warn); }
+  .pill.off { background: #252a34; color: var(--quiet); }
+  .num { font-variant-numeric: tabular-nums; }
+  .muted { color: var(--quiet); }
+
+  .bottom { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(420px, 620px) minmax(420px, 1fr); gap: 14px; }
+  .feed { height: 300px; overflow-y: auto; font-size: 13px; }
+  .feed div { display: grid; grid-template-columns: 52px 96px 1fr; gap: 8px; padding: 4px 14px; border-bottom: 1px solid #1f232c; }
+  .feed .t { color: var(--faint); font-variant-numeric: tabular-nums; }
+  .feed .n { color: var(--quiet); }
+  .feed .warn .x { color: var(--warn); } .feed .bad .x { color: var(--bad); font-weight: 600; } .feed .good .x { color: var(--good); }
+  .chips { display: flex; gap: 6px; margin-left: auto; text-transform: none; letter-spacing: 0; }
+  .metrics td:last-child { text-align: right; font-weight: 650; }
+  .note { color: var(--quiet); font-size: 12px; padding: 0 14px 12px; }
+  .msg { min-height: 18px; font-size: 12px; color: var(--quiet); margin-top: 6px; }
+  .msg.err { color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>SAR control center</h1>
+  <span class="run" id="run">-</span>
+  <div class="clock" id="clock">0:00<small>mission</small></div>
+  <div class="kpis">
+    <div class="kpi" id="kpi-leader"><b id="k-leader">-</b><span>Leader station</span></div>
+    <div class="kpi"><b id="k-victims">-</b><span>Victims confirmed</span></div>
+    <div class="kpi"><b id="k-cov">-</b><span>Coverage</span></div>
+    <div class="kpi"><b id="k-queue">-</b><span>Review queue</span></div>
+    <div class="kpi" id="kpi-contact"><b id="k-contact">-</b><span>Drones in contact</span></div>
+    <div class="kpi" id="kpi-faults"><b id="k-faults">0</b><span>Active faults</span></div>
+    <div class="kpi"><b id="k-left">-</b><span>Run ends in</span></div>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="cardhead">Search area: truth vs. what the station believes
+      <div class="toggles" id="toggles"></div>
+    </div>
+    <div class="mapwrap">
+      <canvas id="map" width="1100" height="1100"></canvas>
+      <div class="tip" id="tip"></div>
+      <div class="banner" id="banner">Click the map to place the jam zone · Esc to cancel</div>
+    </div>
+    <div class="legend">
+      <span><i style="background:#3b82f6"></i>Drone (dashed box = its job, line = its path)</span>
+      <span><i style="background:#e5e7eb;border-radius:2px"></i>Ground station (star = leader)</span>
+      <span><i style="background:#16a34a"></i>Link &gt;75% delivered</span>
+      <span><i style="background:#f59e0b"></i>35–75%</span>
+      <span><i style="background:#dc2626"></i>&lt;35%</span>
+      <span><i style="background:transparent;border:2px solid #cbd5e1"></i>Victim (true), not seen</span>
+      <span><i style="background:transparent;border:2px solid #f59e0b"></i>Seen, not yet confirmed</span>
+      <span><i style="background:#16a34a"></i>Victim confirmed</span>
+      <span><i style="background:#9ca3af;border-radius:2px;transform:rotate(45deg)"></i>Decoy</span>
+      <span><i style="background:#eab308;border-radius:2px"></i>Station: pending</span>
+      <span><i style="background:#ef4444;border-radius:2px"></i>Station: confirmed</span>
+      <span><i style="background:rgba(220,38,38,.25);border:1px solid #dc2626"></i>Jam zone</span>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="card">
+      <div class="tabs">
+        <div class="tab on" data-pane="faults">Faults</div>
+        <div class="tab" data-pane="nodes">Nodes</div>
+        <div class="tab" data-pane="network">Network</div>
+      </div>
+
+      <div class="pane on" id="pane-faults">
+        <div class="tool clocktool">
+          <h3>Mission clock</h3>
+          <p>Pause to set up faults calmly, then resume. Drones, batteries, reviews and scripted faults stop;
+             the network keeps running (heartbeats, elections), as real radios would.</p>
+          <div class="row">
+            <button class="btn dark" id="pause">Pause</button>
+            <span class="muted">Speed</span>
+            <span id="speeds"></span>
+            <b class="num" id="speed-v">-</b>
+          </div>
+        </div>
+        <div class="tool">
+          <h3>Black out a node</h3>
+          <p>Its radio and ground links go silent. The process keeps running.</p>
+          <div class="row"><select id="bo-node"></select><select class="dur" id="bo-dur"></select>
+            <button class="btn danger" id="bo-go">Black out</button></div>
+        </div>
+        <div class="tool">
+          <h3>Cut one link</h3>
+          <p>Only these two nodes stop hearing each other.</p>
+          <div class="row"><select id="cut-a"></select><select id="cut-b"></select><select class="dur" id="cut-dur"></select>
+            <button class="btn danger" id="cut-go">Cut</button></div>
+        </div>
+        <div class="tool">
+          <h3>Jam an area</h3>
+          <p>No radio in or out of a circle on the map.</p>
+          <div class="row"><select id="jam-r"><option value="150">r = 150 m</option><option value="250" selected>r = 250 m</option><option value="400">r = 400 m</option></select>
+            <select class="dur" id="jam-dur"></select><button class="btn danger" id="jam-go">Place on map</button></div>
+        </div>
+        <div class="tool">
+          <h3>Radio loss everywhere</h3>
+          <p>Base packet loss on every radio link (scenario default <span id="loss-default"></span>).</p>
+          <div class="row"><input type="range" id="loss" min="0" max="60" step="1"><b class="num" id="loss-v">-</b>
+            <button class="btn dark" id="loss-go">Apply</button></div>
+        </div>
+        <div class="tool">
+          <div class="row" style="justify-content:space-between"><h3>Active faults</h3>
+            <button class="btn small" id="clear">Clear all</button></div>
+          <table><tbody id="active"></tbody></table>
+        </div>
+        <div class="msg" id="msg"></div>
+      </div>
+
+      <div class="pane" id="pane-nodes">
+        <table>
+          <thead><tr><th>Node</th><th>Process</th><th>Status</th><th></th></tr></thead>
+          <tbody id="nodes"></tbody>
+        </table>
+        <p class="muted" style="font-size:12px">Kill stops the process (a crash). Restart starts a fresh one with a new incarnation number;
+          until replication (step 4) a restarted station has lost its state.</p>
+      </div>
+
+      <div class="pane" id="pane-network">
+        <table class="metrics"><tbody id="netstats"></tbody></table>
+        <h3 style="font-size:13px;margin:14px 0 4px">Links in the last few seconds</h3>
+        <table><thead><tr><th>From → to</th><th>Delivered</th><th>Packets</th><th>Main loss reason</th></tr></thead>
+          <tbody id="links"></tbody></table>
+      </div>
+    </section>
+  </aside>
+
+  <div class="bottom">
+    <section class="card">
+      <div class="cardhead" style="flex-wrap:wrap"><span style="white-space:nowrap">Event feed</span>
+        <span class="muted" id="evcount" style="white-space:nowrap;text-transform:none;letter-spacing:0"></span>
+        <div class="chips" id="feedchips"></div>
+      </div>
+      <div class="feed" id="feed"></div>
+    </section>
+    <section class="card">
+      <div class="cardhead">Live metrics (against ground truth)</div>
+      <table class="metrics"><tbody id="metrics"></tbody></table>
+      <div class="note" id="opui"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const TERRAIN = { rubble: [155,123,98], damaged_building: [201,183,156], road: [207,207,207], forest: [111,154,98], open_field: [223,232,199], water: [143,183,217] };
+const CLUSTER = { pending: "#eab308", recheck: "#ea580c", confirmed: "#ef4444", conflict: "#a855f7", rejected: "#6b7280" };
+// Mission minutes (at x25, 5 mission minutes = 12 real seconds).
+const DURATIONS = [["2", "2 min"], ["5", "5 min"], ["10", "10 min"], ["20", "20 min"], ["40", "40 min"], ["", "until cleared"]];
+const layers = { terrain: true, labels: true, links: true, ranges: false, truth: true, belief: true };
+const LAYER_NAMES = { terrain: "Terrain", labels: "Drone labels", links: "Radio links", ranges: "Station range", truth: "True victims", belief: "Station belief" };
+const DRONE_COLORS = ["#3b82f6", "#06b6d4", "#a78bfa", "#f472b6", "#facc15", "#4ade80", "#fb923c"];
+let map = null, S = null, selected = null, placing = false, feedFilter = "all", lastFeedLen = -1;
+
+function say(text, err = false) { $("msg").textContent = text; $("msg").className = "msg" + (err ? " err" : ""); }
+async function post(path, body = {}) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json(); if (j.ok === false) say(j.reason || "Refused", true); else say("Done.");
+  return j;
+}
+const mmss = t => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, "0")}`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---- toggles, tabs, chips ----------------------------------------------------------
+for (const [k, name] of Object.entries(LAYER_NAMES)) {
+  const b = document.createElement("span"); b.className = "toggle" + (layers[k] ? " on" : ""); b.textContent = name;
+  b.onclick = () => { layers[k] = !layers[k]; b.classList.toggle("on", layers[k]); terrainCache = null; draw(); };
+  $("toggles").appendChild(b);
+}
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + t.dataset.pane));
+});
+for (const f of ["all", "fault", "replication", "membership", "tasks", "command", "review", "error"]) {
+  const c = document.createElement("span"); c.className = "toggle" + (f === "all" ? " on" : "");
+  c.textContent = f === "all" ? "All" : f[0].toUpperCase() + f.slice(1); c.dataset.f = f;
+  c.onclick = () => { feedFilter = f; document.querySelectorAll("#feedchips .toggle").forEach(x => x.classList.toggle("on", x === c)); lastFeedLen = -1; renderFeed(); };
+  $("feedchips").appendChild(c);
+}
+document.querySelectorAll("select.dur").forEach(s => { s.innerHTML = DURATIONS.map(([v, l]) => `<option value="${v}">${l} mission</option>`).join(""); s.value = "10"; });
+
+// ---- fault tools ---------------------------------------------------------------------
+const dur = id => $(id).value ? Number($(id).value) : null;
+$("bo-go").onclick = () => post("/api/fault", { kind: "isolate", nodes: [$("bo-node").value], duration_min: dur("bo-dur") });
+$("cut-go").onclick = () => post("/api/fault", { kind: "cut", nodes: [$("cut-a").value, $("cut-b").value], duration_min: dur("cut-dur") });
+$("jam-go").onclick = () => { placing = true; $("map").classList.add("placing"); $("banner").style.display = "block"; };
+document.addEventListener("keydown", e => { if (e.key === "Escape") stopPlacing(); });
+function stopPlacing() { placing = false; $("map").classList.remove("placing"); $("banner").style.display = "none"; }
+$("clear").onclick = () => post("/api/faults/clear");
+// ---- mission clock ----------------------------------------------------------------------
+const SPEEDS = [1, 5, 10, 25, 50, 100];
+$("speeds").innerHTML = SPEEDS.map(s => `<button class="btn small" data-s="${s}">x${s}</button>`).join("");
+$("speeds").querySelectorAll("button").forEach(b => b.onclick = () => post("/api/clock", { action: "speed", speed: Number(b.dataset.s) }));
+$("pause").onclick = () => post("/api/clock", { action: S && S.paused ? "resume" : "pause" });
+document.addEventListener("keydown", e => {
+  if (e.key === " " && !["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) { e.preventDefault(); $("pause").click(); }
+});
+function renderClock() {
+  $("pause").textContent = S.paused ? "▶ Resume (space)" : "❚❚ Pause (space)";
+  $("speed-v").textContent = S.paused ? "paused" : `x${S.speedup} = ${(S.speedup / 60).toFixed(S.speedup < 60 ? 2 : 1)} mission min per second`;
+  $("speeds").querySelectorAll("button").forEach(b => b.classList.toggle("on", Number(b.dataset.s) === (S.paused ? S.run_speed : S.speedup)));
+}
+$("loss").oninput = () => $("loss-v").textContent = $("loss").value + "%";
+$("loss-go").onclick = () => post("/api/loss", { loss: Number($("loss").value) / 100 });
+
+// ---- map ------------------------------------------------------------------------------
+const C = $("map"), G = C.getContext("2d");
+const W = () => C.width;
+const worldW = () => map.width * map.cell_m;
+const px = x => x / worldW() * W(), py = y => W() - y / worldW() * W();
+const toWorld = (cx, cy) => [cx / W() * worldW(), (W() - cy) / W() * worldW()];
+let terrainCache = null;
+
+function nodePos(id) {
+  if (!S) return null;
+  if (S.drones[id]) return [S.drones[id].x, S.drones[id].y];
+  if (S.stations[id] && S.stations[id].x != null) return [S.stations[id].x, S.stations[id].y];
+  return null;
+}
+function nodeInfo(id) { return S && S.nodes.find(n => n.id === id); }
+
+function drawTerrain() {
+  if (terrainCache) { G.drawImage(terrainCache, 0, 0); return; }
+  const off = document.createElement("canvas"); off.width = W(); off.height = W();
+  const g = off.getContext("2d"), sx = W() / map.width;
+  g.fillStyle = "#14171d"; g.fillRect(0, 0, W(), W());
+  if (layers.terrain) {
+    for (let j = 0; j < map.height; j++) for (let i = 0; i < map.width; i++) {
+      const [r, gg, b] = TERRAIN[map.terrain[j][i]] || [230, 230, 230];
+      // muted terrain so the overlays stand out
+      g.fillStyle = `rgb(${Math.round(r * .42 + 20 * .58)},${Math.round(gg * .42 + 23 * .58)},${Math.round(b * .42 + 29 * .58)})`;
+      g.fillRect(i * sx, W() - (j + 1) * sx, sx + 0.6, sx + 0.6);
+    }
+  }
+  g.strokeStyle = "rgba(255,255,255,.06)"; g.lineWidth = 1;
+  for (let k = 0; k <= map.width; k += 10) { g.beginPath(); g.moveTo(k * sx, 0); g.lineTo(k * sx, W()); g.stroke(); g.beginPath(); g.moveTo(0, k * sx); g.lineTo(W(), k * sx); g.stroke(); }
+  terrainCache = off; G.drawImage(off, 0, 0);
+}
+
+function draw() {
+  if (!map) return;
+  G.clearRect(0, 0, W(), W());
+  drawTerrain();
+  if (!S) return;
+  const scale = W() / worldW();
+  // jam zones
+  for (const f of S.faults) if (f.kind === "jam") {
+    G.beginPath(); G.arc(px(f.zone.x), py(f.zone.y), f.zone.radius_m * scale, 0, 7);
+    G.fillStyle = "rgba(220,38,38,.16)"; G.fill(); G.setLineDash([8, 6]); G.lineWidth = 2.5; G.strokeStyle = "#dc2626"; G.stroke(); G.setLineDash([]);
+  }
+  // station range
+  if (layers.ranges) for (const [id, st] of Object.entries(S.stations)) if (st.x != null) {
+    G.beginPath(); G.arc(px(st.x), py(st.y), map.radio.groundstation.rmax_m * scale, 0, 7);
+    G.setLineDash([4, 8]); G.lineWidth = 2; G.strokeStyle = "rgba(226,232,240,.45)"; G.stroke(); G.setLineDash([]);
+    G.beginPath(); G.arc(px(st.x), py(st.y), map.radio.groundstation.r0_m * scale, 0, 7);
+    G.strokeStyle = "rgba(226,232,240,.2)"; G.stroke();
+  }
+  // links (both directions merged; best direction shown)
+  if (layers.links) {
+    const pairs = {};
+    for (const l of S.links) {
+      const k = [l.src, l.dst].sort().join("|");
+      if (!pairs[k] || l.rate > pairs[k].rate) pairs[k] = l;
+    }
+    for (const l of Object.values(pairs)) {
+      if (l.rate <= 0) continue;
+      const a = nodePos(l.src), b = nodePos(l.dst); if (!a || !b) continue;
+      G.beginPath(); G.moveTo(px(a[0]), py(a[1])); G.lineTo(px(b[0]), py(b[1]));
+      G.strokeStyle = l.rate >= .75 ? "rgba(22,163,74,.8)" : l.rate >= .35 ? "rgba(245,158,11,.85)" : "rgba(220,38,38,.8)";
+      G.lineWidth = 2 + 3 * l.rate; G.stroke();
+    }
+  }
+  // truth
+  if (layers.truth) {
+    for (const d of map.decoys) {
+      const x = px(d.x), y = py(d.y);
+      G.save(); G.translate(x, y); G.rotate(Math.PI / 4); G.fillStyle = "#9ca3af"; G.fillRect(-5, -5, 10, 10); G.restore();
+    }
+    const conf = new Set(S.victims_confirmed), det = new Set(S.victims_detected);
+    for (const v of map.victims) {
+      const x = px(v.x), y = py(v.y);
+      G.beginPath(); G.arc(x, y, 8, 0, 7);
+      G.fillStyle = conf.has(v.id) ? "#16a34a" : "rgba(0,0,0,0)"; G.fill();
+      G.lineWidth = 2.5; G.strokeStyle = conf.has(v.id) ? "#86efac" : det.has(v.id) ? "#f59e0b" : "#cbd5e1"; G.stroke();
+    }
+  }
+  // station belief
+  if (layers.belief) for (const c of Object.values(S.clusters)) {
+    if (c.x == null) continue;
+    const x = px(c.x), y = py(c.y), r = 5 + Math.min(c.count, 5);
+    G.fillStyle = CLUSTER[c.status] || "#000"; G.fillRect(x - r, y - r, 2 * r, 2 * r);
+    G.lineWidth = 1.5; G.strokeStyle = "#0b0d12"; G.strokeRect(x - r, y - r, 2 * r, 2 * r);
+  }
+  // stations
+  for (const [id, st] of Object.entries(S.stations)) {
+    if (st.x == null) continue;
+    const n = nodeInfo(id), x = px(st.x), y = py(st.y);
+    G.fillStyle = n && !n.running ? "#4b5563" : "#e5e7eb"; G.fillRect(x - 13, y - 13, 26, 26);
+    if (n && n.isolated) { G.lineWidth = 4; G.strokeStyle = "#dc2626"; G.strokeRect(x - 18, y - 18, 36, 36); }
+    if (id === selected) { G.lineWidth = 3; G.strokeStyle = "#60a5fa"; G.strokeRect(x - 22, y - 22, 44, 44); }
+    const lead = (st.consensus || {}).role === "leader" && n && n.running;
+    if (lead) { G.fillStyle = "#b45309"; G.font = "bold 16px system-ui"; G.textAlign = "center"; G.textBaseline = "middle"; G.fillText("★", x, y + 1); }
+    label(lead ? id + " (leader)" : id, x, y - 22);
+  }
+  // what each drone is doing: its job outline and its recent path
+  const cell = W() / map.width;
+  Object.entries(S.drones).forEach(([id, d], k) => {
+    const col = DRONE_COLORS[k % DRONE_COLORS.length], n = nodeInfo(id);
+    if (n && !n.running) return;
+    if (d.rect && d.sector != null) {
+      const [i0, j0, i1, j1] = d.rect;
+      G.setLineDash([9, 6]); G.lineWidth = 2.5; G.strokeStyle = col;
+      G.strokeRect(i0 * cell, W() - j1 * cell, (i1 - i0) * cell, (j1 - j0) * cell); G.setLineDash([]);
+    }
+    if (d.trail && d.trail.length > 1) {
+      G.beginPath(); d.trail.forEach(([tx, ty], m) => m ? G.lineTo(px(tx), py(ty)) : G.moveTo(px(tx), py(ty)));
+      G.lineTo(px(d.x), py(d.y)); G.strokeStyle = col + "99"; G.lineWidth = 3; G.stroke();
+    }
+  });
+  // drones
+  Object.entries(S.drones).forEach(([id, d], k) => {
+    const n = nodeInfo(id), x = px(d.x), y = py(d.y), dead = n && !n.running;
+    G.beginPath(); G.arc(x, y, 14, 0, 7); G.fillStyle = dead ? "#4b5563" : DRONE_COLORS[k % DRONE_COLORS.length]; G.fill();
+    G.lineWidth = 3; G.strokeStyle = d.station_link === false && !dead ? "#ef4444" : "#0b0d12"; G.stroke();
+    if (n && n.isolated) { G.beginPath(); G.arc(x, y, 21, 0, 7); G.setLineDash([5, 4]); G.lineWidth = 3; G.strokeStyle = "#dc2626"; G.stroke(); G.setLineDash([]); }
+    if (id === selected) { G.beginPath(); G.arc(x, y, 25, 0, 7); G.lineWidth = 3; G.strokeStyle = "#60a5fa"; G.stroke(); }
+    G.fillStyle = "#fff"; G.font = "bold 14px system-ui"; G.textAlign = "center"; G.textBaseline = "middle";
+    G.fillText(dead ? "✕" : id.replace("drone-", ""), x, y + 1);
+    if (!dead && layers.labels) label(`${STATE_WORD[d.state] || d.state}${d.battery_pct != null ? " · " + d.battery_pct + "%" : ""}`, x, y - 17);
+  });
+}
+const STATE_WORD = { search: "searching", transit: "flying to job", return: "going home", seeking_link: "looking for signal",
+  queued: "waiting for battery", swap: "battery swap", idle: "at base", standby: "waiting to launch", inspect: "closer look", down: "crashed" };
+function label(text, x, y) {
+  G.font = "600 13px system-ui"; G.textAlign = "center"; G.textBaseline = "bottom";
+  const w = G.measureText(text).width + 10;
+  G.fillStyle = "rgba(10,12,16,.85)"; G.fillRect(x - w / 2, y - 17, w, 17);
+  G.fillStyle = "#e5e7eb"; G.fillText(text, x, y - 2);
+}
+
+C.addEventListener("mousemove", ev => {
+  if (!map || !S) return;
+  const r = C.getBoundingClientRect(), cx = (ev.clientX - r.left) / r.width * W(), cy = (ev.clientY - r.top) / r.height * W();
+  const [wx, wy] = toWorld(cx, cy), tip = $("tip"), near = 40 / W() * worldW();
+  let text = "";
+  for (const [id, d] of Object.entries(S.drones)) if (Math.hypot(d.x - wx, d.y - wy) < near)
+    text = `<b>${esc(id)}</b>: ${esc(STATE_WORD[d.state] || d.state)}${d.sector != null ? ", job " + d.sector : ""}` +
+      `${d.battery_pct != null ? ", battery " + d.battery_pct + "%" : ""}${d.station_link === false ? ", <b>no station link</b>" : ""}, ${d.outbox} messages waiting to send`;
+  if (!text) for (const [id, st] of Object.entries(S.stations)) if (st.x != null && Math.hypot(st.x - wx, st.y - wy) < near) {
+    const c = st.consensus || {};
+    text = `<b>${esc(id)}</b>: ${esc(c.role || "?")} in term ${c.term ?? "-"}, ${c.commit ?? "-"} entries committed, review queue ${st.queue ?? "-"}`;
+  }
+  if (!text && layers.belief) for (const [cid, c] of Object.entries(S.clusters)) if (c.x != null && Math.hypot(c.x - wx, c.y - wy) < near / 2)
+    text = `<b>Object ${esc(cid)}</b> (station's view): ${esc(c.status)}, ${c.count} sighting${c.count > 1 ? "s" : ""}`;
+  if (!text && layers.truth) for (const v of map.victims) if (Math.hypot(v.x - wx, v.y - wy) < near / 2)
+    text = `<b>Victim ${esc(v.id)}</b> (truth): ${S.victims_confirmed.includes(v.id) ? "confirmed" : S.victims_detected.includes(v.id) ? "seen, not yet confirmed" : "not seen yet"}`;
+  if (!text) {
+    const i = Math.floor(wx / map.cell_m), j = Math.floor(wy / map.cell_m);
+    if (map.terrain[j] && map.terrain[j][i]) text = `${esc(map.terrain[j][i].replace("_", " "))} at ${Math.round(wx)}, ${Math.round(wy)} m`;
+  }
+  tip.innerHTML = text; tip.style.display = text ? "block" : "none";
+  tip.style.left = (ev.clientX - r.left + 14) + "px"; tip.style.top = (ev.clientY - r.top + 14) + "px";
+});
+C.addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
+C.addEventListener("click", ev => {
+  if (!map) return;
+  const r = C.getBoundingClientRect(), cx = (ev.clientX - r.left) / r.width * W(), cy = (ev.clientY - r.top) / r.height * W();
+  const [wx, wy] = toWorld(cx, cy);
+  if (placing) {
+    stopPlacing();
+    post("/api/fault", { kind: "jam", zone: { x: Math.round(wx), y: Math.round(wy), radius_m: Number($("jam-r").value) }, duration_min: dur("jam-dur") });
+    return;
+  }
+  let best = null, bd = 60 / W() * worldW();
+  for (const id of [...Object.keys(S?.drones || {}), ...Object.keys(S?.stations || {})]) {
+    const p = nodePos(id); if (!p) continue;
+    const d = Math.hypot(p[0] - wx, p[1] - wy); if (d < bd) { bd = d; best = id; }
+  }
+  select(best);
+});
+function select(id) {
+  selected = id;
+  if (id) for (const s of ["bo-node", "cut-a"]) if ([...$(s).options].some(o => o.value === id)) $(s).value = id;
+  renderNodes(); draw();
+}
+
+// ---- panels ----------------------------------------------------------------------------
+let nodeOptionsKey = "";
+function fillNodeSelects() {
+  const ids = S.nodes.filter(n => !n.infrastructure).map(n => n.id);
+  const key = ids.join(","); if (key === nodeOptionsKey) return; nodeOptionsKey = key;
+  const radio = S.nodes.filter(n => n.role === "drone" || n.role === "groundstation").map(n => n.id);
+  const opts = list => list.map(i => `<option>${i}</option>`).join("");
+  $("bo-node").innerHTML = opts(ids); $("cut-a").innerHTML = opts(radio); $("cut-b").innerHTML = opts(radio);
+  if (radio.length > 1) $("cut-b").value = radio[1];
+}
+
+function renderNodes() {
+  if (!S) return;
+  const rows = [];
+  for (const n of S.nodes) {
+    if (n.infrastructure) continue;
+    let proc = n.running ? (n.incarnation ? `<span class="pill warn">restarted ×${n.incarnation}</span>` : `<span class="pill ok">running</span>`)
+                         : `<span class="pill bad">${n.down ? "killed" : "crashed"}</span>`;
+    let status = "";
+    if (n.role === "drone" && S.drones[n.id]) {
+      const d = S.drones[n.id];
+      status = `${esc(d.state)}${d.sector != null ? " · s" + d.sector : ""}` +
+        (d.battery_pct != null ? ` · <span class="pill ${d.battery_pct < 25 ? "bad" : d.battery_pct < 50 ? "warn" : "ok"}">${d.battery_pct}%</span>` : "") +
+        ` · outbox ${d.outbox}` +
+        (d.station_link === false ? ` · <span class="pill bad">no station</span>` : "");
+    } else if (n.role === "groundstation" && S.stations[n.id]) {
+      const st = S.stations[n.id], c = st.consensus || {};
+      const rolePill = !n.running ? "" : c.role === "leader" ? `<span class="pill ok">leader</span>`
+        : c.role === "candidate" ? `<span class="pill warn">candidate</span>`
+        : c.leader ? `<span class="pill off">follower</span>` : `<span class="pill bad">no leader</span>`;
+      status = `${rolePill} term ${c.term ?? "-"} · commit ${c.commit ?? "-"}` +
+        (st.provisional ? ` · <span class="pill warn">${st.provisional} provisional</span>` : "") +
+        `<div class="muted" style="font-size:11px">queue ${st.queue ?? "-"} · lost ${(st.suspected || []).length} drone(s)</div>`;
+    } else if (n.role === "operator") status = "bot analyst";
+    if (n.isolated) status += ` · <span class="pill bad">blacked out</span>`;
+    const act = n.running ? `<button class="btn small" data-kill="${n.id}">Kill</button>` : "";
+    rows.push(`<tr class="${n.id === selected ? "sel" : ""}" data-sel="${n.id}"><td><b>${n.id}</b><div class="muted" style="font-size:11px">${n.role}</div></td>
+      <td>${proc}</td><td>${status}</td><td class="row">${act}<button class="btn small" data-restart="${n.id}">Restart</button></td></tr>`);
+  }
+  $("nodes").innerHTML = rows.join("");
+}
+$("nodes").addEventListener("click", e => {
+  const k = e.target.dataset.kill, r = e.target.dataset.restart;
+  if (k) return post("/api/node/kill", { node: k });
+  if (r) return post("/api/node/restart", { node: r });
+  const tr = e.target.closest("tr"); if (tr) select(tr.dataset.sel);
+});
+
+function renderFaults() {
+  const rows = S.faults.map(f => {
+    const what = f.kind === "jam" ? `jam r=${f.zone.radius_m} m at (${f.zone.x}, ${f.zone.y})`
+               : f.kind === "cut" ? `cut ${f.nodes.join(" ↔ ")}` : `blackout ${f.nodes.join(", ")}`;
+    const left = f.end == null ? "until cleared" : `${mmss(f.end - S.t)} left`;
+    const btn = f.id ? `<button class="btn small" data-end="${f.id}">End</button>` : `<span class="muted">scripted</span>`;
+    return `<tr><td>${esc(what)}</td><td class="muted num">${left}</td><td>${btn}</td></tr>`;
+  });
+  $("active").innerHTML = rows.join("") || `<tr><td class="muted">No active faults.</td></tr>`;
+}
+$("active").addEventListener("click", e => { if (e.target.dataset.end) post("/api/fault/end", { id: e.target.dataset.end }); });
+
+function renderNetwork() {
+  const m = S.metrics || {};
+  const stats = [["Packets relayed", m.packets_relayed], ["Retransmissions", m.retransmissions],
+    ["Sightings lost in transit", m.sightings_lost_in_transit], ["Sighting delay, median (mission s)", m.delivery_delay_s_median],
+    ["Sighting delay, 95th pct (mission s)", m.delivery_delay_s_p95]];
+  $("netstats").innerHTML = stats.map(([k, v]) => `<tr><td>${k}</td><td class="num">${v ?? "-"}</td></tr>`).join("");
+  const links = S.links.filter(l => l.n > 0).sort((a, b) => a.rate - b.rate).slice(0, 40);
+  $("links").innerHTML = links.map(l => {
+    const reasons = Object.entries(l.reasons).filter(([k]) => k !== "ok").sort((a, b) => b[1] - a[1]);
+    const cls = l.rate >= .75 ? "ok" : l.rate >= .35 ? "warn" : "bad";
+    return `<tr><td>${l.src} → ${l.dst}</td><td><span class="pill ${cls}">${Math.round(100 * l.rate)}%</span></td><td class="num">${l.n}</td><td class="muted">${reasons.length ? reasons[0][0].replace("_", " ") : "-"}</td></tr>`;
+  }).join("");
+}
+
+function renderFeed() {
+  if (!S) return;
+  const items = S.feed.filter(f => feedFilter === "all" || f.kind === feedFilter);
+  const key = items.length + ":" + (items.at(-1)?.t ?? "");
+  if (key === lastFeedLen) return; lastFeedLen = key;
+  $("feed").innerHTML = items.slice().reverse().map(f =>
+    `<div class="${f.level}"><span class="t">${f.time}</span><span class="n">${esc(f.node || "")}</span><span class="x">${esc(f.text)}</span></div>`).join("");
+  $("evcount").textContent = `${S.events} events logged`;
+}
+
+const METRIC_LABELS = [["victims_confirmed", "Victims confirmed"], ["victims_detected", "Victims seen by a drone"], ["operator_reviews", "Operator reviews"],
+  ["duplicate_reviews_of_a_victim", "Same victim reviewed again"], ["false_confirmations", "False alarms confirmed"], ["real_victims_rejected", "Real victims rejected"],
+  ["queue_wait_s_median", "Queue wait, median (mission s)"], ["sectors_done", "Sectors done"], ["minutes_to_50pct_detected", "Half the victims detected (min)"],
+  ["research_jobs", "Re-search jobs"], ["bingo_returns", "Early returns (battery)"], ["leases_expired", "Leases expired"],
+  ["lost_aircraft", "Lost aircraft"], ["swap_wait_s_max", "Longest swap wait (s)"],
+  ["minutes_with_no_drone_searching", "Minutes with no drone searching"], ["coverage_pct", "Coverage (station's view) %"], ["errors_logged", "Errors logged"]];
+function renderMetrics() {
+  const m = S.metrics || {};
+  $("metrics").innerHTML = METRIC_LABELS.map(([k, l]) => `<tr><td>${l}</td><td class="num">${m[k] ?? "-"}${k === "victims_confirmed" && m.victims ? " / " + m.victims : ""}</td></tr>`).join("");
+  const ui = Object.entries(S.ui_ports || {});
+  $("opui").innerHTML = ui.length ? "Operator UI: " + ui.map(([id, p]) => `<a href="http://127.0.0.1:${p}/" target="_blank">${id}</a>`).join(", ") : "";
+}
+
+function renderHeader() {
+  $("run").textContent = `${S.name} · ${S.paused ? "paused" : "×" + S.speedup}`;
+  $("clock").innerHTML = `${mmss(S.t)}<small>${S.paused ? "PAUSED" : "mission"}</small>`;
+  $("clock").classList.toggle("paused", !!S.paused);
+  renderClock();
+  const m = S.metrics || {};
+  const leaders = Object.entries(S.stations).filter(([id, st]) => (st.consensus || {}).role === "leader" && nodeInfo(id)?.running);
+  $("k-leader").textContent = leaders.length === 0 ? "none" : leaders.map(([id, st]) => `${id} t${st.consensus.term}`).join(" + ");
+  $("kpi-leader").classList.toggle("alert", leaders.length !== 1);
+  $("k-victims").textContent = m.victims ? `${S.victims_confirmed.length}/${m.victims}` : "-";
+  const st = Object.values(S.stations)[0] || {};
+  $("k-cov").textContent = st.total ? Math.round(100 * st.covered / st.total) + "%" : "-";
+  $("k-queue").textContent = st.queue ?? "-";
+  const drones = Object.values(S.drones), inContact = drones.filter(d => d.station_link).length;
+  $("k-contact").textContent = `${inContact}/${S.nodes.filter(n => n.role === "drone").length}`;
+  $("kpi-contact").classList.toggle("alert", inContact < drones.length);
+  $("k-faults").textContent = S.faults.length; $("kpi-faults").classList.toggle("alert", S.faults.length > 0);
+  $("k-left").textContent = S.paused ? "paused" : S.left_real_s > 0 ? mmss(S.left_real_s) : "ended";
+  if (document.activeElement !== $("loss")) { $("loss").value = Math.round(100 * S.loss); $("loss-v").textContent = Math.round(100 * S.loss) + "%"; }
+}
+
+function render() {
+  if (!S) return;
+  renderHeader(); fillNodeSelects(); renderNodes(); renderFaults(); renderNetwork(); renderFeed(); renderMetrics(); draw();
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = ev => { S = JSON.parse(ev.data); render(); };
+  ws.onclose = () => { say("Connection lost (run ended?). Retrying…", true); setTimeout(connect, 2000); };
+}
+fetch("/api/map").then(r => r.json()).then(m => { map = m; $("loss-default").textContent = Math.round(100 * m.radio_loss) + "%"; draw(); });
+connect();
+</script>
+</body>
+</html>

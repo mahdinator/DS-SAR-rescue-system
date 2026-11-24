@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAR operations</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --ink: #e6e8ec; --quiet: #9aa1ad; --line: #2a2f3a; --soft: #222733;
+    --accent: #3b82f6; --good: #22c55e; --bad: #ef4444; --warn: #f59e0b; --conflict: #a855f7; --field: #0f1218;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: center; gap: 8px 22px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .stat { color: var(--quiet); white-space: nowrap; } .stat b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  header label { margin-left: auto; color: var(--quiet); }
+  input, select { font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--ink); }
+  header input { width: 140px; }
+  .banner { padding: 8px 20px; font-weight: 600; display: none; }
+  .banner.show { display: block; }
+  .banner.warn { background: #3a2a0c; color: #fbbf24; } .banner.bad { background: #3a1717; color: #fca5a5; }
+  main { display: grid; grid-template-columns: minmax(420px, 600px) minmax(380px, 1fr); gap: 16px; padding: 16px 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h2, h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--quiet); margin: 0 0 10px; font-weight: 600; }
+  h3 { margin-top: 18px; }
+  canvas#map { width: 100%; aspect-ratio: 1; display: block; border-radius: 6px; cursor: default; }
+  canvas#map.picking { cursor: crosshair; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; color: var(--quiet); font-size: 12px; }
+  .legend i { display: inline-block; width: 11px; height: 11px; margin-right: 5px; vertical-align: -1px; border-radius: 2px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toggles { display: flex; gap: 12px; flex-wrap: wrap; color: var(--quiet); font-size: 13px; margin-bottom: 8px; }
+  button { font: inherit; padding: 7px 13px; border-radius: 8px; border: 1px solid var(--line); background: var(--soft); color: var(--ink); cursor: pointer; }
+  button.small { padding: 3px 9px; font-size: 12px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.confirm { background: #15803d; border-color: #15803d; color: #fff; }
+  button.reject { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: -4px -4px 14px; }
+  .tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--quiet); }
+  .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .tabs .count { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; margin-left: 4px; }
+  .tabs .count[hidden] { display: none; }
+  .pane { display: none; } .pane.on { display: block; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin: 10px 0; }
+  .kv div:nth-child(odd) { color: var(--quiet); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--soft); color: var(--quiet); }
+  .pill.ok { background: #14301f; color: #4ade80; } .pill.bad { background: #3a1717; color: #f87171; }
+  .pill.warn { background: #3a2a0c; color: #fbbf24; } .pill.blue { background: #172554; color: #93c5fd; }
+  .pill.pending { background: #3a2f0a; color: #fde047; } .pill.recheck { background: #3a2a0c; color: #fdba74; }
+  .pill.conflict { background: #2e1647; color: #d8b4fe; }
+  .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; margin: 12px 0; }
+  .thumb canvas { width: 100%; aspect-ratio: 1; image-rendering: pixelated; border-radius: 4px; background: #000; display: block; }
+  .guide { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 10px 0; background: #12151b; }
+  .guide summary { cursor: pointer; color: var(--quiet); font-size: 13px; }
+  .guide .ex { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
+  .guide .ex canvas { width: 46%; aspect-ratio: 1; image-rendering: pixelated; border-radius: 4px; margin-right: 2%; }
+  .guide .ex b { display: block; font-size: 12px; } .guide .ex small { color: var(--quiet); font-size: 11px; }
+  .tip { position: absolute; display: none; pointer-events: none; max-width: 280px; background: rgba(10,12,16,.95); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 9px; font-size: 12px; z-index: 5; }
+  .mapwrap { position: relative; }
+  .legend b { color: var(--ink); font-weight: 600; margin-right: 2px; } .legend .grp { display: flex; flex-wrap: wrap; gap: 4px 12px; width: 100%; }
+  .thumb small { display: block; color: var(--quiet); font-size: 11px; margin-top: 3px; }
+  .msg { min-height: 20px; color: var(--quiet); margin-top: 8px; } .msg.err { color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--quiet); font-weight: 500; }
+  .hint { color: var(--quiet); font-size: 12px; }
+  .drones { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .dcard { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .dcard .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .bar { height: 8px; background: var(--soft); border-radius: 4px; overflow: hidden; margin: 4px 0 6px; }
+  .bar i { display: block; height: 100%; }
+  .line { color: var(--quiet); font-size: 12px; }
+  .list > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .muted { color: var(--quiet); }
+</style>
+</head>
+<body>
+<header>
+  <h1>SAR operations <span id="station" class="stat"></span></h1>
+  <div class="stat">Station <b id="role">-</b></div>
+  <div class="stat">Mission <b id="clock">-</b></div>
+  <div class="stat">In command <b id="ic">-</b></div>
+  <div class="stat">Queue <b id="queue">-</b></div>
+  <div class="stat">Confirmed <b id="nconf">0</b></div>
+  <div class="stat">Coverage <b id="cov">-</b></div>
+  <label>You are <input id="operator" placeholder="your name"></label>
+</header>
+<div class="banner" id="banner"></div>
+<main>
+  <section class="card">
+    <div class="toggles">
+      <label><input type="radio" name="layer" value="terrain" checked> Terrain</label>
+      <label><input type="radio" name="layer" value="poa"> Where people may still be</label>
+      <label><input type="checkbox" id="showTrails" checked> Trails</label>
+      <label><input type="checkbox" id="showJobs" checked> Jobs</label>
+    </div>
+    <div class="mapwrap"><canvas id="map" width="1000" height="1000"></canvas><div class="tip" id="tip"></div></div>
+    <div class="legend" id="legend"></div>
+    <p class="hint">This is <b id="station2"></b>'s own copy of the mission. During a network fault, stations can show different things.</p>
+  </section>
+  <section class="card">
+    <div class="tabs">
+      <button data-tab="review" class="on">Review</button>
+      <button data-tab="drones">Drones</button>
+      <button data-tab="stations">Stations</button>
+      <button data-tab="command">Command <span class="count" id="alertCount" hidden></span></button>
+    </div>
+
+    <div class="pane on" id="pane-review">
+      <div id="empty">
+        <div class="row"><button class="primary" id="claim">Claim next (N)</button></div>
+        <p class="hint">You get the most likely unreviewed object. Nobody else is offered it while you hold it.</p>
+      </div>
+      <div id="item" hidden>
+        <div class="row"><b id="cid"></b><span class="pill" id="cstatus"></span><span class="stat" id="lease"></span></div>
+        <div class="kv" id="facts"></div>
+        <div class="hint">Thermal camera crops (simulated), one per sighting. Warm is bright. Each crop is about 3 m across.</div>
+        <div class="thumbs" id="thumbs"></div>
+        <details class="guide" id="guide" open><summary>How to read these crops</summary><div class="ex" id="examples"></div>
+          <p class="hint" style="margin:8px 0 0">Blurry, grainy crops come from poor views (forest canopy, rubble). Several sightings of one object help: look for the shape in any of them. If you cannot tell, ask for a <b>closer look</b>.</p></details>
+        <div class="row">
+          <button class="confirm" id="confirm">Confirm victim (C)</button>
+          <button class="reject" id="reject">Reject (R)</button>
+          <button id="inspect" title="Send a drone low over this spot for a better image">Closer look</button>
+          <button id="release">Release</button>
+        </div>
+      </div>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <div class="pane" id="pane-drones">
+      <div class="drones" id="droneCards"></div>
+      <p class="hint">Positions are the last ones this station heard. "Lease" is the drone's right to its job: it ends at the battery deadline, after which the job is given to another drone.</p>
+    </div>
+
+    <div class="pane" id="pane-stations">
+      <h2>This station</h2>
+      <div class="kv" id="me"></div>
+      <h3>Other stations (as heard here)</h3>
+      <table><thead><tr><th>Station</th><th>Epoch</th><th>Says</th><th>Last heard</th></tr></thead><tbody id="peers"></tbody></table>
+      <h3>Jobs</h3>
+      <div class="kv" id="jobs"></div>
+      <h3>Battery swap queue at base</h3>
+      <div id="swap" class="muted"></div>
+    </div>
+
+    <div class="pane" id="pane-command">
+      <div class="kv" id="cmdFacts"></div>
+      <div id="offer"></div>
+      <h3>Alerts</h3><div class="list" id="alerts"></div>
+      <h3>Disputed verdicts</h3><div class="list" id="conflicts"></div>
+      <h3>Priority zones</h3>
+      <div class="list" id="zones"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="small" id="pick">Pick on map</button>
+        x <input id="zx" size="4"> y <input id="zy" size="4"> radius <input id="zr" size="4" value="150"> m
+        weight <input id="zw" size="2" value="3">
+        <button class="small primary" id="addZone">Add zone</button>
+      </div>
+      <h3>Hand over command</h3>
+      <div class="row"><select id="handTo"></select><button class="small" id="handOver">Offer command</button></div>
+      <h3>Audit trail</h3>
+      <table><thead><tr><th>#</th><th>Time</th><th>Who</th><th>Action</th><th>Result</th></tr></thead><tbody id="audit"></tbody></table>
+      <div class="msg" id="cmsg"></div>
+    </div>
+  </section>
+</main>
+<script>
+const TERRAIN = { rubble: [155,123,98], damaged_building: [201,183,156], road: [190,190,190], forest: [111,154,98], open_field: [210,222,180], water: [110,160,210] };
+const TERRAIN_NAME = { rubble: "Rubble", damaged_building: "Damaged building", road: "Road", forest: "Forest", open_field: "Open field", water: "Water" };
+const STATUS = { pending: "#eab308", recheck: "#f97316", confirmed: "#ef4444", conflict: "#a855f7", rejected: "#6b7280" };
+const STATUS_WORD = { pending: "to review", recheck: "to review again", confirmed: "confirmed victim", conflict: "disputed", rejected: "rejected" };
+const DRONE_COLORS = ["#3b82f6", "#06b6d4", "#a78bfa", "#f472b6", "#facc15", "#4ade80", "#fb923c"];
+const STATE_WORD = { search: "searching", transit: "flying to job", return: "going home", seeking_link: "looking for signal",
+  queued: "waiting for battery", swap: "battery swap", idle: "at base", standby: "waiting to launch", inspect: "closer look", down: "crashed" };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const mmss = t => { t = Math.max(0, t || 0); return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`; };
+const opInput = $("operator");
+opInput.value = new URLSearchParams(location.search).get("operator") || localStorage.getItem("sar-operator") || "";
+opInput.addEventListener("change", () => localStorage.setItem("sar-operator", opInput.value.trim()));
+let map = null, state = null, item = null, poa = null, layer = "terrain", picking = false;
+
+function say(text, err = false, el = "msg") { const m = $(el); m.textContent = text; m.className = "msg" + (err ? " err" : ""); }
+function me() { return opInput.value.trim(); }
+function operator(el = "msg") { const v = me(); if (!v) { say("Enter your name first.", true, el); opInput.focus(); } return v; }
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return r.json();
+}
+
+// -- tabs -------------------------------------------------------------------------------
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + b.dataset.tab));
+});
+
+// -- thermal palette (ironbow): cold = dark blue/purple, warm = orange/yellow/white ---------
+const STOPS = [[0, [8, 6, 30]], [.3, [60, 16, 110]], [.5, [170, 32, 90]], [.68, [235, 95, 30]], [.84, [250, 190, 50]], [1, [255, 255, 225]]];
+function iron(v) {
+  const t = v / 255;
+  for (let k = 1; k < STOPS.length; k++) if (t <= STOPS[k][0]) {
+    const [a, ca] = STOPS[k - 1], [b, cb] = STOPS[k], f = (t - a) / (b - a);
+    return ca.map((x, i) => Math.round(x + (cb[i] - x) * f));
+  }
+  return STOPS[STOPS.length - 1][1];
+}
+
+// -- map --------------------------------------------------------------------------------
+function legend() {
+  const sw = (c, t) => `<span><i style="background:${c}"></i>${t}</span>`;
+  const ground = layer === "poa"
+    ? [sw("#3a2a10", "Little chance left"), sw("#f59e0b", "High chance someone is still there")]
+    : Object.keys(TERRAIN).map(k => sw(`rgb(${tint(TERRAIN[k]).join(",")})`, TERRAIN_NAME[k]));
+  $("legend").innerHTML = `<div class="grp"><b>Ground</b>${ground.join("")}</div>
+    <div class="grp"><b>Work</b>${sw("transparent;border:2px dashed #3b82f6", "Job a drone is flying (its colour)")}${sw("transparent;border:1px solid #5b6270", "Job waiting")}${sw("rgba(255,255,255,.12)", "Searched")}${sw("transparent;border:2px dashed #ef4444;border-radius:50%", "Priority zone")}</div>
+    <div class="grp"><b>Objects</b>${Object.entries(STATUS).map(([k, c]) => sw(c + ";border-radius:50%", STATUS_WORD[k])).join("")}${sw("#e5e7eb", "Base")}</div>`;
+}
+function tint([r, g, b]) { return [Math.round(r * .45 + 18 * .55), Math.round(g * .45 + 21 * .55), Math.round(b * .45 + 27 * .55)]; }
+document.querySelectorAll("input[name=layer]").forEach(r => r.onchange = () => { layer = r.value; legend(); if (layer === "poa") loadPoa(); draw(); });
+["showTrails", "showJobs"].forEach(id => $(id).onchange = draw);
+async function loadPoa() { poa = await (await fetch("/api/poa")).json(); draw(); }
+setInterval(() => { if (layer === "poa") loadPoa(); }, 5000);
+function heat(v) {  // 0..255 -> dark brown .. bright amber
+  const t = v / 255;
+  return `rgb(${Math.round(30 + 215 * t)},${Math.round(24 + 134 * t)},${Math.round(14 + 0 * t)})`;
+}
+function tag(g, text, x, y, col = "#e5e7eb") {
+  g.font = "600 20px system-ui"; g.textAlign = "center"; g.textBaseline = "bottom";
+  const w = g.measureText(text).width + 12;
+  g.fillStyle = "rgba(10,12,16,.85)"; g.fillRect(x - w / 2, y - 24, w, 24);
+  g.fillStyle = col; g.fillText(text, x, y - 3);
+}
+
+function draw() {
+  const c = $("map"), g = c.getContext("2d");
+  if (!map || !map.width) return;
+  const W = c.width, sx = W / map.width, worldW = map.width * map.cell_m;
+  const px = x => x / worldW * W, py = y => W - y / worldW * W;
+  for (let j = 0; j < map.height; j++) for (let i = 0; i < map.width; i++) {
+    g.fillStyle = layer === "poa" && poa && poa.rows.length ? heat(poa.rows[j][i])
+      : `rgb(${tint(TERRAIN[map.terrain[j][i]] || [80, 80, 80]).join(",")})`;
+    g.fillRect(i * sx, W - (j + 1) * sx, sx + 0.5, sx + 0.5);
+  }
+  if (!state) return;
+  const colorOf = {}; state.drones.forEach((d, n) => colorOf[d.id] = DRONE_COLORS[n % DRONE_COLORS.length]);
+  if ($("showJobs").checked) {
+    for (const s of state.sectors) {
+      if (s.kind === "inspect" || s.state === "assigned") continue;
+      const x = s.i0 * sx, y = W - s.j1 * sx, w = (s.i1 - s.i0) * sx, h = (s.j1 - s.j0) * sx;
+      if (s.state === "done") { g.fillStyle = "rgba(255,255,255,0.10)"; g.fillRect(x, y, w, h); }
+      g.strokeStyle = "rgba(160,170,185,0.35)"; g.lineWidth = 1; g.strokeRect(x, y, w, h);
+    }
+    for (const s of state.sectors) {  // jobs being flown on top, in the drone's colour
+      if (s.kind === "inspect" || s.state !== "assigned") continue;
+      const x = s.i0 * sx, y = W - s.j1 * sx, w = (s.i1 - s.i0) * sx, h = (s.j1 - s.j0) * sx;
+      g.setLineDash([12, 7]); g.strokeStyle = colorOf[s.drone] || "#3b82f6"; g.lineWidth = 3.5; g.strokeRect(x + 2, y + 2, w - 4, h - 4); g.setLineDash([]);
+    }
+  }
+  for (const z of (state.command?.zones || [])) {
+    g.beginPath(); g.arc(px(z.x), py(z.y), z.radius_m / worldW * W, 0, 7);
+    g.fillStyle = "rgba(239,68,68,.08)"; g.fill();
+    g.setLineDash([10, 7]); g.lineWidth = 3; g.strokeStyle = "#ef4444"; g.stroke(); g.setLineDash([]);
+    tag(g, `priority x${z.weight}`, px(z.x), py(z.y) + 12, "#fca5a5");
+  }
+  g.fillStyle = "#e5e7eb"; g.fillRect(px(map.base[0]) - 11, py(map.base[1]) - 22, 22, 22);
+  tag(g, "BASE", px(map.base[0]), py(map.base[1]) - 26);
+  for (const k of state.clusters) {
+    const x = px(k.x), y = py(k.y), r = 8 + Math.min(k.count, 6) * 1.5;
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = STATUS[k.status] || "#000"; g.fill();
+    g.lineWidth = 2; g.strokeStyle = "#0b0d12"; g.stroke();
+    if (k.status === "pending" || k.status === "recheck" || k.status === "conflict") {
+      g.fillStyle = "#0b0d12"; g.font = "bold 15px system-ui"; g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(k.status === "conflict" ? "!" : "?", x, y + 1);
+    }
+    if (item && k.id === item.id) { g.beginPath(); g.arc(x, y, r + 9, 0, 7); g.lineWidth = 4; g.strokeStyle = "#93c5fd"; g.stroke(); }
+  }
+  for (const d of state.drones) {
+    const col = colorOf[d.id];
+    if ($("showTrails").checked && d.trail.length > 1) {
+      g.beginPath(); d.trail.forEach(([tx, ty], k) => k ? g.lineTo(px(tx), py(ty)) : g.moveTo(px(tx), py(ty)));
+      g.lineTo(px(d.x), py(d.y)); g.strokeStyle = col + "99"; g.lineWidth = 3; g.stroke();
+    }
+  }
+  for (const d of state.drones) {
+    const col = d.suspected ? "#ef4444" : colorOf[d.id], x = px(d.x), y = py(d.y);
+    g.beginPath(); g.arc(x, y, 14, 0, 7); g.fillStyle = col; g.fill();
+    g.lineWidth = 3; g.strokeStyle = "#0b0d12"; g.stroke();
+    g.fillStyle = "#0b0d12"; g.font = "bold 15px system-ui"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(d.id.replace("drone-", ""), x, y + 1);
+    const words = d.suspected ? "no contact" : (STATE_WORD[d.state] || d.state);
+    tag(g, `${words}${d.battery_pct != null ? " · " + d.battery_pct + "%" : ""}`, x, y - 17, d.suspected ? "#fca5a5" : "#e5e7eb");
+  }
+}
+$("map").addEventListener("mousemove", ev => {
+  if (!map || !state) return;
+  const r = ev.target.getBoundingClientRect(), worldW = map.width * map.cell_m;
+  const wx = (ev.clientX - r.left) / r.width * worldW, wy = (1 - (ev.clientY - r.top) / r.height) * worldW, near = 35 / r.width * worldW;
+  let text = "";
+  for (const d of state.drones) if (Math.hypot(d.x - wx, d.y - wy) < near) {
+    const j = d.job;
+    text = `<b>${esc(d.id)}</b>: ${esc(d.suspected ? "no contact for " + Math.round(d.age_s) + " s" : STATE_WORD[d.state] || d.state)}` +
+      (d.battery_pct != null ? `, battery ${d.battery_pct}%` : "") + (j ? `<br>job ${d.sector}: ${j.progress}/${j.cells} cells` : "");
+  }
+  if (!text) for (const k of state.clusters) if (Math.hypot(k.x - wx, k.y - wy) < near * .6)
+    text = `<b>Object ${esc(k.id)}</b>: ${esc(STATUS_WORD[k.status] || k.status)}, ${k.count} sighting${k.count > 1 ? "s" : ""}${k.claimed_by ? ", being reviewed by " + esc(k.claimed_by) : ""}`;
+  if (!text) {
+    const i = Math.floor(wx / map.cell_m), j = Math.floor(wy / map.cell_m);
+    const job = state.sectors.find(s => s.kind !== "inspect" && i >= s.i0 && i < s.i1 && j >= s.j0 && j < s.j1 && s.state !== "done")
+      || state.sectors.find(s => s.kind !== "inspect" && i >= s.i0 && i < s.i1 && j >= s.j0 && j < s.j1);
+    if (map.terrain[j]) text = `${TERRAIN_NAME[map.terrain[j][i]] || ""}` + (poa && poa.rows[j] ? `, chance left ${Math.round(100 * poa.rows[j][i] / 255)}% of the highest` : "") +
+      (job ? `<br>job ${job.id}: ${job.state === "assigned" ? "being searched by " + esc(job.drone) : job.state}${job.pass ? ` (pass ${job.pass + 1})` : ""}` : "");
+  }
+  const tip = $("tip"); tip.innerHTML = text; tip.style.display = text ? "block" : "none";
+  tip.style.left = (ev.clientX - r.left + 14) + "px"; tip.style.top = (ev.clientY - r.top + 14) + "px";
+});
+$("map").addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
+$("map").addEventListener("click", ev => {
+  if (!picking || !map) return;
+  const r = ev.target.getBoundingClientRect(), worldW = map.width * map.cell_m;
+  $("zx").value = Math.round((ev.clientX - r.left) / r.width * worldW);
+  $("zy").value = Math.round((1 - (ev.clientY - r.top) / r.height) * worldW);
+  picking = false; $("map").classList.remove("picking"); say("Position picked. Set radius and weight, then Add zone.", false, "cmsg");
+});
+
+// -- review -----------------------------------------------------------------------------
+function thumbCanvas(pixels) {
+  const n = pixels ? Math.round(Math.sqrt(pixels.length)) : 16;
+  const c = document.createElement("canvas"); c.width = n; c.height = n;
+  if (pixels && n * n === pixels.length) {
+    const g = c.getContext("2d"), img = g.createImageData(n, n);
+    pixels.forEach((v, k) => { img.data.set([...iron(v), 255], k * 4); });
+    g.putImageData(img, 0, 0);
+  }
+  return c;
+}
+fetch("/api/examples").then(r => r.json()).then(ex => {
+  const what = { victim: ["Person", "head, body, arms and legs"], decoy: ["Debris or clothing", "a warm lump, no head or limbs"],
+                 noise: ["One-off spots", "small scattered warm spots"] };
+  const box = $("examples");
+  for (const k of ["victim", "decoy", "noise"]) {
+    const d = document.createElement("div");
+    for (const px of ex[k]) d.appendChild(thumbCanvas(px));
+    d.insertAdjacentHTML("beforeend", `<b>${what[k][0]}</b><small>${what[k][1]}</small>`);
+    box.appendChild(d);
+  }
+  if (localStorage.getItem("sar-guide-seen")) $("guide").open = false;
+  $("guide").addEventListener("toggle", () => localStorage.setItem("sar-guide-seen", "1"));
+});
+
+function showItem(it) {
+  item = it;
+  $("empty").hidden = !!it; $("item").hidden = !it;
+  if (!it) return draw();
+  $("cid").textContent = "Object " + it.id;
+  $("cstatus").textContent = it.status; $("cstatus").className = "pill " + it.status;
+  const facts = [
+    ["Sightings", it.count + (it.count > 1 ? " (grouped as one object)" : "")],
+    ["Highest confidence", it.max_confidence.toFixed(2)],
+    ["Seen by", it.drones.join(", ")],
+    ["Position", `${it.x} m, ${it.y} m (±${(2.5 * it.sigma).toFixed(0)} m)`],
+  ];
+  if (it.status === "recheck") facts.push(["Note", "Near something already rejected. Look again."]);
+  $("facts").innerHTML = facts.map(([k, v]) => `<div>${k}</div><div>${esc(v)}</div>`).join("");
+  const box = $("thumbs"); box.innerHTML = "";
+  for (const m of it.members) {
+    const d = document.createElement("div"); d.className = "thumb";
+    d.appendChild(thumbCanvas(m.thumb));
+    const s = document.createElement("small");
+    s.textContent = `${m.drone} · ${m.mode === "inspect" ? "closer look" : m.mode} · detector ${Math.round(100 * m.confidence)}% · view ${Math.round(100 * (m.evidence || 0))}%`;
+    d.appendChild(s); box.appendChild(d);
+  }
+  updateLease(); draw();
+}
+let leaseEnd = 0;
+function updateLease() {
+  if (!item || item.lease_left_s == null) return;
+  if (!leaseEnd) leaseEnd = Date.now() + item.lease_left_s * 1000;
+  const left = Math.max(0, Math.round((leaseEnd - Date.now()) / 1000));
+  $("lease").textContent = `held by you · ${left} s left`;
+  if (left === 0) { say("Your claim expired; the object went back to the queue.", true); leaseEnd = 0; showItem(null); }
+}
+setInterval(updateLease, 500);
+async function claim() {
+  const op = operator(); if (!op) return;
+  const r = await post("/api/claim", { operator: op });
+  if (r.error) return say(r.error, true);
+  leaseEnd = 0;
+  if (!r.item) { say("Nothing to review right now."); return showItem(null); }
+  say(""); showItem(r.item);
+}
+async function decide(decision) {
+  if (!item) return;
+  const op = operator(); if (!op) return;
+  const r = await post("/api/verdict", { operator: op, cluster_id: item.id, decision, seen: item.status });
+  if (r.ok && r.provisional) say(`Saved provisionally (no leader reachable): ${item.id} will be merged later.`, true);
+  else if (r.ok) say(`${decision === "confirmed" ? "Confirmed" : "Rejected"} ${item.id}.`);
+  else say("Refused: " + r.reason, true);
+  leaseEnd = 0; showItem(null);
+}
+async function inspect() {
+  if (!item) return;
+  const op = operator(); if (!op) return;
+  const r = await post("/api/inspect", { operator: op, cluster_id: item.id });
+  say(r.ok ? `A drone will take a closer look at ${item.id}. You can release it and review it again later.` : "Not sent: " + r.reason, !r.ok);
+}
+async function release() {
+  if (!item) return;
+  await post("/api/release", { operator: operator(), cluster_id: item.id });
+  say(`Released ${item.id}.`); leaseEnd = 0; showItem(null);
+}
+$("claim").onclick = claim; $("confirm").onclick = () => decide("confirmed");
+$("reject").onclick = () => decide("rejected"); $("release").onclick = release; $("inspect").onclick = inspect;
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  const k = e.key.toLowerCase();
+  if (k === "n" && !item) claim(); else if (k === "c") decide("confirmed"); else if (k === "r") decide("rejected");
+});
+
+// -- command ----------------------------------------------------------------------------
+async function command(action, args = {}) {
+  const op = operator("cmsg"); if (!op) return;
+  const r = await post("/api/command", { operator: op, action, args });
+  say(r.ok ? `Done: ${action}.` : `Refused: ${r.reason}`, !r.ok, "cmsg");
+}
+window.command = command;
+$("pick").onclick = () => { picking = true; $("map").classList.add("picking"); say("Click the map where the zone should go.", false, "cmsg"); };
+$("addZone").onclick = () => command("zone", { x: +$("zx").value, y: +$("zy").value, radius_m: +$("zr").value, weight: +$("zw").value });
+$("handOver").onclick = () => $("handTo").value && command("transfer", { to: $("handTo").value });
+setInterval(() => { if (me()) post("/api/presence", { operator: me() }); }, 2000);
+
+// -- render -----------------------------------------------------------------------------
+function renderDrones() {
+  $("droneCards").innerHTML = state.drones.map((d, n) => {
+    const pct = d.battery_pct, col = pct == null ? "#94a3b8" : pct < 25 ? "#b91c1c" : pct < 50 ? "#c2410c" : "#15803d";
+    const link = d.suspected ? `<span class="pill bad">no contact ${Math.round(d.age_s / 60)} min</span>` : `<span class="pill ok">link ok</span>`;
+    const j = d.job;
+    const job = j ? `${j.kind === "inspect" ? "Closer look" : j.pass ? `Re-search (pass ${j.pass + 1})` : "Search"} · job ${d.sector} · ${j.progress}/${j.cells} cells`
+                  : "No job";
+    const lease = j ? (j.lease_ok ? `lease until ${mmss(j.deadline)}` : `<span class="pill warn">lease not current</span>`) : "";
+    return `<div class="dcard"><div class="top"><b style="color:${DRONE_COLORS[n % DRONE_COLORS.length]}">${esc(d.id)}</b><span class="pill blue">${esc(d.state)}</span></div>
+      <div class="line">Battery ${pct == null ? "not modelled" : pct + "%"}</div>
+      <div class="bar"><i style="width:${pct ?? 100}%;background:${col}"></i></div>
+      <div class="line">${job}</div><div class="line">${lease}</div>
+      <div class="line" style="margin-top:4px">${link} <span class="muted">at ${Math.round(d.x)}, ${Math.round(d.y)} m</span></div></div>`;
+  }).join("") || `<p class="muted">No drone heard yet.</p>`;
+}
+function renderStations() {
+  const c = state.consensus;
+  const role = c.role === "leader" ? `<span class="pill ok">leader</span>` : c.role === "candidate" ? `<span class="pill warn">candidate</span>` : `<span class="pill">${esc(c.role)}</span>`;
+  $("me").innerHTML = [["Role", role + ` (${esc(c.kind)})`], ["Term / epoch", c.term], ["Leader", c.leader ?? "none known"],
+    ["Log", `committed ${c.commit} of ${c.last_index}`],
+    ["Reaches the leader", state.leader_reachable ? "yes" : `<span class="pill bad">no</span>`],
+    ["Kept provisionally", state.provisional ? `<span class="pill warn">${state.provisional} decisions</span>` : "none"]]
+    .map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join("");
+  $("peers").innerHTML = Object.entries(state.peers).sort().map(([p, b]) =>
+    `<tr><td>${esc(p)}</td><td>${b.epoch}</td><td>${b.leader ? "I lead" : b.leader_id ? "follows " + esc(b.leader_id) : "no leader"}</td>
+     <td>${b.age_s > 3 ? `<span class="pill bad">${b.age_s.toFixed(0)} s ago</span>` : "just now"}</td></tr>`).join("")
+    || `<tr><td colspan="4" class="muted">No other station heard.</td></tr>`;
+  const p = state.pool || {};
+  $("jobs").innerHTML = [["Waiting", p.waiting], ["Out with drones", p.assigned], ["Done", p.done], ["Re-search jobs made", p.research_jobs],
+    ["Closer looks", p.inspect_jobs], ["Leftovers waiting", p.leftovers]].map(([k, v]) => `<div>${k}</div><div>${v ?? "-"}</div>`).join("");
+  $("swap").innerHTML = state.swap ? (state.swap.swapping.length || state.swap.queue.length
+      ? `Swapping: <b>${state.swap.swapping.join(", ") || "nobody"}</b> · waiting: ${state.swap.queue.join(", ") || "nobody"}` : "Nobody at the swap point.")
+    : "The leader station keeps the queue.";
+}
+function renderCommand() {
+  const cm = state.command, mine = me();
+  const roster = cm.roster || {};
+  $("cmdFacts").innerHTML = [["Incident commander", (cm.commander ? `<b>${esc(cm.commander)}</b>` : "nobody") + (cm.acting ? ` <span class="pill warn">acting</span>` : "")],
+    ["Your role", mine ? (roster[mine] || (Object.keys(roster).length ? "not on the roster" : "no roster: anyone may act")) : "enter your name"],
+    ["Present", (cm.present || []).join(", ") || "-"]].map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join("");
+  const o = cm.offer;
+  $("offer").innerHTML = o ? `<div class="card" style="background:#2a210b;border-color:#5b4510">${o.kind === "succession" ? `${esc(o.absent)} is not responding. ` : ""}Command offered to <b>${esc(o.to)}</b>${o.by !== "system" ? " by " + esc(o.by) : ""}.
+      ${o.to === mine ? `<div class="row" style="margin-top:8px"><button class="confirm small" onclick="command('accept')">Accept command</button><button class="small" onclick="command('decline')">Decline</button></div>` : ""}</div>` : "";
+  const unacked = cm.alerts.filter(a => !a.acked_by);
+  $("alertCount").hidden = !unacked.length; $("alertCount").textContent = unacked.length;
+  $("alerts").innerHTML = cm.alerts.slice().reverse().map(a => `<div><span>${a.kind === "lost_aircraft" ? `Lost aircraft: <b>${esc(a.drone)}</b> (job ${a.sector})` : esc(a.kind)}</span>
+      ${a.acked_by ? `<span class="muted">acknowledged by ${esc(a.acked_by)}</span>` : `<button class="small reject" onclick="command('ack',{alert:'${esc(a.id)}'})">Acknowledge</button>`}</div>`).join("") || `<div class="muted">None.</div>`;
+  $("conflicts").innerHTML = (cm.conflicts || []).map(c => `<div><span>Object <b>${esc(c)}</b> was confirmed and rejected</span><span>
+      <button class="small confirm" onclick="command('resolve',{cluster:'${esc(c)}',decision:'confirmed'})">Confirm</button>
+      <button class="small reject" onclick="command('resolve',{cluster:'${esc(c)}',decision:'rejected'})">Reject</button></span></div>`).join("") || `<div class="muted">None.</div>`;
+  $("zones").innerHTML = cm.zones.map(z => `<div><span>Zone ${z.id}: (${z.x}, ${z.y}) r ${z.radius_m} m, ×${z.weight} <span class="muted">by ${esc(z.by)}</span></span>
+      <button class="small" onclick="command('clear_zone',{id:${z.id}})">Clear</button></div>`).join("") || `<div class="muted">None. Drones go where people are most likely to be found.</div>`;
+  const cands = Object.entries(roster).filter(([p, r]) => r === "commander" && p !== cm.commander).map(([p]) => p);
+  const cur = $("handTo").value;
+  $("handTo").innerHTML = cands.map(p => `<option ${p === cur ? "selected" : ""}>${esc(p)}</option>`).join("") || `<option value="">(nobody else can hold command)</option>`;
+  $("audit").innerHTML = (state.audit || []).slice().reverse().map(a => `<tr><td>${a.index}</td><td>${mmss(a.t)}</td><td>${esc(a.by)}</td>
+      <td>${esc(a.action)} ${esc(Object.entries(a.args || {}).map(([k, v]) => k + "=" + v).join(" "))}</td>
+      <td>${a.ok ? "ok" : `<span class="pill bad">refused</span> ${esc(a.reason)}`}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nothing yet.</td></tr>`;
+}
+function render() {
+  if (!state) return;
+  $("station").textContent = "· " + state.station; $("station2").textContent = state.station;
+  const c = state.consensus;
+  $("role").textContent = c.role === "leader" ? "leader" : c.leader ? `follower of ${c.leader}` : "no leader";
+  $("clock").textContent = mmss(state.t);
+  $("queue").textContent = state.queue;
+  $("nconf").textContent = state.counts.confirmed || 0;
+  $("cov").textContent = state.total_cells ? Math.round(100 * state.covered_cells / state.total_cells) + "%" : "-";
+  $("ic").textContent = (state.command.commander || "nobody") + (state.command.acting ? " (acting)" : "");
+  const b = $("banner");
+  if (!state.leader_reachable) { b.className = "banner show bad"; b.textContent = "No leader station reachable: verdicts are kept here provisionally and merged later; command actions and new jobs wait."; }
+  else if (state.command.offer && state.command.offer.to === me()) { b.className = "banner show warn"; b.textContent = "You are offered command. Open the Command tab to accept."; }
+  else b.className = "banner";
+  renderDrones(); renderStations(); renderCommand(); draw();
+}
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = ev => { state = JSON.parse(ev.data); render(); };
+  ws.onclose = () => { say("Connection to the ground station lost. Retrying…", true); setTimeout(connect, 2000); };
+  ws.onopen = () => say("");
+}
+legend();
+fetch("/api/map").then(r => r.json()).then(m => { map = m; draw(); });
+connect();
+</script>
+</body>
+</html>

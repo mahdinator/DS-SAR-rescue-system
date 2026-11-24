@@ -1,0 +1,47 @@
+# Step 5: sortie-sized jobs, leases with fencing tokens, POA x POD tasking with re-search.
+# Drones carry a 20-minute battery: they give work back when they must go home,
+# swap at base and come back. drone-3 dies mid-job: its lease runs out at its battery
+# deadline and the unfinished part goes to someone else.
+#
+# Compare strategies (same seed):
+#   python -m sar.launcher.run scenarios/step5.yaml --name sweep --set planner.strategy=sweep_first
+#   python -m sar.launcher.run scenarios/step5.yaml --name static --set planner.kind=grid --set planner.strategy=static
+name: step5
+seed: 42
+duration_s: 200      # real seconds
+speedup: 25          # about 83 mission minutes
+
+world:
+  width_cells: 50
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+  decoys: 30
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 4
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: true, endurance_s: 1200, reserve_s: 120, swap_s: 120}
+
+ground_stations:
+  count: 3
+
+operators:
+  - {id: bot-1, kind: bot, station: gs-1, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+  - {id: bot-2, kind: bot, station: gs-2, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+
+planner:
+  kind: sortie         # sortie | grid
+  strategy: greedy     # greedy | sweep_first | static
+  max_cells: 200
+  research: {max_passes: 4, stop_frac: 0.1}
+  boost: {factor: 0.5, radius_m: 80}
+  inspect: {enabled: true}
+
+# Mission seconds.
+faults:
+  - {t: 400, kill: drone-3}                      # lost mid-search: its lease must expire
+  - {t: 2400, duration: 420, isolate: [drone-2]}  # out of contact for 7 min, keeps working

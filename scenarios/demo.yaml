@@ -1,0 +1,56 @@
+# Demo: everything on, slow enough to follow and to work in the operator UI.
+#
+#   .venv\Scripts\python -m sar.launcher.run scenarios/demo.yaml
+#
+# Open:
+#   http://127.0.0.1:8090/   control center (faults, kill/restart, everything as it really is)
+#   http://127.0.0.1:8080/   operator UI at gs-1 (8081 = gs-2, 8082 = gs-3): each station's own view
+#
+# In the operator UI type your name as "commander" (you start in command) or
+# "analyst" (you review). If nobody logs in as "commander" within 10 s, the leader
+# station offers command to the bot ic-2, which becomes acting commander.
+name: demo
+seed: 7
+duration_s: 1200     # 20 real minutes
+speedup: 5           # 100 mission minutes
+
+world:
+  width_cells: 50
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+  decoys: 30
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 4
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: true, endurance_s: 1200, reserve_s: 120, swap_s: 120}
+  launch: staggered
+
+ground_stations:
+  count: 3
+
+operators:
+  - {id: bot-1, kind: bot, station: gs-2, accuracy: 0.95, delay_s: 120, match_sigmas: 2.5}
+  - {id: ic-2, kind: commander, station: gs-3, accept_delay_s: 20, ack_delay_s: 60}
+
+command:
+  roster:
+    - {id: commander, role: commander}
+    - {id: ic-2, role: commander}
+    - {id: analyst, role: analyst}
+    - {id: bot-1, role: analyst}
+  initial: commander
+  succession: [commander, ic-2]
+  absence_timeout_real_s: 10
+
+planner:
+  kind: sortie
+  strategy: greedy
+
+ui:
+  enabled: true
+  port: 8080

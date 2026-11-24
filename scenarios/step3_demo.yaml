@@ -1,0 +1,37 @@
+# Step 3 demo: slow enough for a person to review in the web UI alongside a bot.
+# Open the URL the launcher prints (http://127.0.0.1:8080/).
+name: step3_demo
+seed: 7
+duration_s: 900      # 15 real minutes
+speedup: 5           # 75 mission minutes
+
+world:
+  width_cells: 50
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+  decoys: 30
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 4
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: false}   # steps 1-4 were measured without the battery model
+
+ground_stations:
+  count: 1
+
+operators:
+  # The bot reviews slowly, so a person at the UI gets plenty of work too.
+  - {id: bot-1, kind: bot, accuracy: 0.95, delay_s: 120, match_sigmas: 2.5}
+
+planner:
+  kind: grid
+  sector_cells: 10
+  passes: 2
+
+ui:
+  enabled: true
+  port: 8080

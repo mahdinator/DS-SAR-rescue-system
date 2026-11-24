@@ -1,0 +1,47 @@
+# Step 3: deduplication and the review queue.
+# Two sweeps of the area plus fixed decoys, so the same objects are seen again
+# and again: exactly what deduplication is for. Radio on, no scripted faults,
+# so the dedup comparison is not mixed up with network effects.
+name: step3
+seed: 42
+duration_s: 200      # real seconds
+speedup: 25          # about 83 mission minutes
+
+world:
+  width_cells: 50
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+  decoys: 30         # debris or clothing the detector mistakes for a person, every pass
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 5
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: false}   # steps 1-4 were measured without the battery model
+
+ground_stations:
+  count: 1
+
+operators:
+  # One analyst who needs about 30 mission seconds per review.
+  - {id: bot-1, kind: bot, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+
+planner:
+  kind: grid
+  sector_cells: 10
+  passes: 2          # search everything twice (second sweep at lower priority)
+
+dedup:
+  kind: radius_signature   # none | radius | radius_signature
+  link_sigmas: 2.5
+  signature_threshold: 0.7
+
+review:
+  claim_lease_real_s: 30
+
+known_victims:
+  broadcast_real_s: 5
+  suppress: true     # drones stop reporting confirmed victims

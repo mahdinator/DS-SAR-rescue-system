@@ -1,0 +1,51 @@
+# Step 2: the emulated radio, relaying, acks and retries, failure detection.
+# Same world as step 1, plus a fault script. The far corners of the map are
+# beyond direct radio range of the base station, so drones there depend on
+# relays or on carrying their data back.
+name: step2
+seed: 42
+duration_s: 150      # real seconds
+speedup: 25          # about 62 mission minutes
+
+world:
+  width_cells: 50
+  height_cells: 50
+  cell_m: 20
+  victims: 25
+
+base: {x: 500, y: 10}
+
+drones:
+  count: 3
+  cruise_mps: 12
+  search_mps: 6
+  battery: {enabled: false}   # steps 1-4 were measured without the battery model
+
+ground_stations:
+  count: 1
+
+operators:
+  - {id: bot-1, kind: bot, accuracy: 0.95, delay_s: 30, match_sigmas: 2.5}
+
+planner:
+  kind: grid
+  sector_cells: 10
+
+radio:
+  enabled: true
+  loss: 0.02
+  drone: {r0_m: 300, rmax_m: 600}
+  groundstation: {r0_m: 500, rmax_m: 900}
+  relay: true
+  relay_ttl: 3
+
+messaging:
+  reliable: true
+
+failure_detector: {kind: timeout, timeout_real_s: 3.0}
+
+# Mission seconds. 900 s = 15 min.
+faults:
+  - {t: 900,  duration: 300, isolate: [drone-2]}                    # drone-2 radio blackout, 5 min
+  - {t: 1500, duration: 300, jam: {x: 500, y: 500, radius_m: 250}}  # dead zone in the map centre, 5 min
+  - {t: 3000, kill: drone-3}                                        # drone-3 crashes at 50 min
